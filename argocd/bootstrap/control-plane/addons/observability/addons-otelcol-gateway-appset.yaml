@@ -156,8 +156,8 @@ spec:
 
             resources:
               limits:
-                cpu: 500m
-                memory: 512Mi
+                cpu: 100m
+                memory: 200Mi
 
             autoscaling:
               enabled: true
