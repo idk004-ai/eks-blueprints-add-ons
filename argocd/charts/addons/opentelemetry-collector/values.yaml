@@ -1,0 +1,6 @@
+# Default Helm chart values for OpenTelemetry Collector Gateway
+# These values can be overridden by environment or cluster-specific values
+
+# Common configurations that apply across all environments
+# Mode, image, and config are defined in the ApplicationSet template
+# Override here if you need different defaults

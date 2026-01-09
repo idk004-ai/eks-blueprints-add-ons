@@ -1,0 +1,178 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: otelcol-gateway
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - list:
+        elements:
+          - appName: otelcol-gateway
+            releaseName: otelcol-gateway
+            namespace: observability
+            server: https://kubernetes.default.svc
+  template:
+    metadata:
+      name: "{{.appName}}"
+      labels:
+        app.kubernetes.io/name: otelcol-gateway
+        app.kubernetes.io/part-of: observability
+    spec:
+      project: default
+      destination:
+        server: "{{.server}}"
+        namespace: "{{.namespace}}"
+
+      source:
+        repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
+        chart: opentelemetry-collector
+        # Bạn có thể pin chart version theo nhu cầu (ví dụ 0.143.0 là một bản gần đây)
+        targetRevision: 0.143.0
+        helm:
+          releaseName: "{{.releaseName}}"
+          values: |-
+            mode: statefulset
+
+            replicaCount: 1
+
+            image:
+              repository: "otel/opentelemetry-collector-k8s"
+
+            command:
+              name: otelcol-k8s
+
+            # Mount cho WAL/queue (file_storage)
+            extraVolumeMounts:
+              - name: queue
+                mountPath: /var/lib/otelcol
+
+            statefulset:
+              # volumeClaimTemplates for a statefulset
+              volumeClaimTemplates:
+                - metadata:
+                    name: queue
+                  spec:
+                    accessModes: ["ReadWriteOnce"]
+                    resources:
+                      requests:
+                        storage: 10Gi
+                    # storageClassName: gp3  # (EKS) nếu bạn muốn pin SC, còn không thì bỏ để dùng default
+
+            ports:
+              jaeger-compact:
+                enabled: true
+                containerPort: 6831
+                servicePort: 6831
+                hostPort: 6831
+                protocol: UDP
+              jaeger-thrift:
+                enabled: true
+                containerPort: 14268
+                servicePort: 14268
+                hostPort: 14268
+                protocol: TCP
+              jaeger-grpc:
+                enabled: true
+                containerPort: 14250
+                servicePort: 14250
+                hostPort: 14250
+                protocol: TCP
+              zipkin:
+                enabled: true
+                containerPort: 9411
+                servicePort: 9411
+                hostPort: 9411
+                protocol: TCP
+              metrics:
+                enabled: true
+                containerPort: 8888
+                servicePort: 8888
+                protocol: TCP
+              otlp:
+                enabled: true
+                containerPort: 4317
+                servicePort: 4317
+                hostPort: 4317
+                protocol: TCP
+              otlp-http:
+                enabled: true
+                containerPort: 4318
+                servicePort: 4318
+                hostPort: 4318
+                protocol: TCP
+
+            config:
+              extensions:
+                file_storage:
+                  directory: /var/lib/otelcol
+                health_check:
+              receivers:
+                jaeger:
+                  protocols:
+                    grpc:
+                    thrift_compact:
+                    thrift_http:
+                zipkin:
+                  endpoint: "0.0.0.0:9411"
+                otlp:
+                  protocols:
+                    grpc:
+                      endpoint: "0.0.0.0:4317"
+                    http:
+                      endpoint: "0.0.0.0:4318"
+              processors:
+                batch:
+              exporters:
+                zipkin:
+                  endpoint: "http://zipkin.observability.svc.cluster.local:9411/api/v2/spans"
+                  sending_queue:
+                    enabled: true
+                    queue_size: 10000
+                    storage: file_storage
+                  retry_on_failure:
+                    enabled: true
+                    initial_interval: 5s
+                    max_interval: 30s
+                    max_elapsed_time: 10m
+                debug:
+                  verbosity: detailed
+              service:
+                extensions: [health_check, file_storage]
+                pipelines:
+                  traces:
+                    receivers: [otlp, jaeger, zipkin]
+                    processors: [batch]
+                    exporters: [zipkin, debug]
+                  metrics:
+                    receivers: [otlp]
+                    processors: [batch]
+                    exporters: [debug]
+                  logs:
+                    receivers: [otlp]
+                    processors: [batch]
+                    exporters: [debug]
+
+            resources:
+              limits:
+                cpu: 500m
+                memory: 512Mi
+
+            autoscaling:
+              enabled: true
+              minReplicas: 1
+              maxReplicas: 10
+              targetCPUUtilizationPercentage: 80
+
+            service:
+              enabled: true
+              type: ClusterIP
+
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
