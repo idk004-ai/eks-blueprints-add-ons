@@ -50,6 +50,13 @@ spec:
             command:
               name: otelcol-contrib
 
+            podSecurityContext:
+              runAsNonRoot: true
+              runAsUser: 10001
+              runAsGroup: 10001
+              fsGroup: 10001
+              fsGroupChangePolicy: "OnRootMismatch"
+    
             # Mount cho WAL/queue (file_storage)
             extraVolumeMounts:
               - name: queue
