@@ -45,10 +45,10 @@ spec:
             replicaCount: 1
 
             image:
-              repository: "otel/opentelemetry-collector-k8s"
+              repository: "otel/opentelemetry-collector-contrib"
 
             command:
-              name: otelcol-k8s
+              name: otelcol-contrib
 
             # Mount cho WAL/queue (file_storage)
             extraVolumeMounts:
@@ -115,6 +115,7 @@ spec:
                 file_storage:
                   directory: /var/lib/otelcol
                 health_check:
+                  endpoint: "0.0.0.0:13133"
               receivers:
                 jaeger:
                   protocols:
@@ -149,7 +150,7 @@ spec:
                 extensions: [health_check, file_storage]
                 pipelines:
                   traces:
-                    receivers: [otlp, jaeger, zipkin]
+                    receivers: [otlp]
                     processors: [batch]
                     exporters: [zipkin, debug]
                   metrics:
