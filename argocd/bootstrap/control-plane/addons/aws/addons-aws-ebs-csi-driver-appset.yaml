@@ -1,0 +1,50 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: addons-aws-ebs-csi-driver
+  namespace: argocd
+spec:
+  goTemplate: true
+  generators:
+    - list:
+        elements:
+          - name: in-cluster
+            server: https://kubernetes.default.svc
+            roleArn: arn:aws:iam::995138770378:role/AmazonEKS_EBS_CSI_DriverRole
+
+  template:
+    metadata:
+      name: aws-ebs-csi-driver
+    spec:
+      project: default
+      destination:
+        server: "{{ .server }}"
+        namespace: kube-system
+      source:
+        repoURL: https://kubernetes-sigs.github.io/aws-ebs-csi-driver
+        chart: aws-ebs-csi-driver
+        targetRevision: "2.54.1"
+        helm:
+          releaseName: aws-ebs-csi-driver
+          values: |
+            controller:
+              serviceAccount:
+                create: true
+                name: ebs-csi-controller-sa
+                annotations:
+                  eks.amazonaws.com/role-arn: "{{ .roleArn }}"
+
+            # Node SA thường không cần IRSA riêng; để mặc định.
+            # Nếu cluster bạn yêu cầu strict, bạn có thể thêm annotation tương tự.
+            node:
+              serviceAccount:
+                create: true
+                name: ebs-csi-node-sa
+
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=false
+          - ServerSideApply=true
